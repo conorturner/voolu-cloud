@@ -1,0 +1,7 @@
+PyJWT
+boto3
+python-json-logger
+lambdarest
+bcrypt
+httpx
+pyopenssl

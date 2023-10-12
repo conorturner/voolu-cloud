@@ -1,0 +1,64 @@
+{
+  "name": "landrick",
+  "version": "2.0.0",
+  "private": true,
+  "dependencies": {
+    "@iconscout/react-unicons": "^1.1.5",
+    "ansi-regex": "^6.0.1",
+    "aos": "^2.3.4",
+    "bootstrap": "^4.5.3",
+    "feather-icons-react": "^0.4.1",
+    "node-sass": "^7.0.1",
+    "npm": "^6.14.9",
+    "nth-check": "^2.1.1",
+    "number-counter": "^1.0.3",
+    "react": "^16.14.0",
+    "react-countdown-now": "^2.1.2",
+    "react-countup": "^4.3.3",
+    "react-dom": "^16.14.0",
+    "react-flatpickr": "^3.10.6",
+    "react-icons": "^3.11.0",
+    "react-masonry-css": "^1.0.14",
+    "react-parallax": "^3.1.2",
+    "react-responsive-carousel": "^3.2.10",
+    "react-router-dom": "^5.2.0",
+    "react-scripts": "^5.0.1",
+    "react-scroll-parallax": "^2.3.5",
+    "react-scroll-to": "^3.0.0-beta.6",
+    "react-scroll-up-button": "^1.6.4",
+    "react-scrollspy-nav": "^1.2.4",
+    "react-star-ratings": "^2.3.0",
+    "react-typist": "^2.0.5",
+    "react-typist-loop": "0.0.5",
+    "react-youtube": "^7.13.0",
+    "reactstrap": "^8.7.1",
+    "redux": "^4.0.5",
+    "slick-carousel": "^1.8.1",
+    "webpack": "4.44.2"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "install": "PATH=\"$(pyenv root)/shims:${PATH}\" CXXFLAGS=\"--std=c++14\""
+  },
+  "eslintConfig": {
+    "extends": "react-app"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "gulp-sass": "^5.1.0"
+  }
+}

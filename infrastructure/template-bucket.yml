@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Voolu Cloud Stack Templates"
+
+Parameters:
+  TemplateBucket:
+    Description: Name for template bucket (probably the same as the stack name)
+    Type: String
+  FragmentBucket:
+    Description: Name for fragment build bucket
+    Type: String
+
+Resources:
+  TemplateS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref TemplateBucket
+  FragmentS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref FragmentBucket

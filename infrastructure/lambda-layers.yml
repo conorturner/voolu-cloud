@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: 'AWS::Serverless-2016-10-31'
+Description: "Voolu Cloud - Lambda layers"
+
+Resources:
+  PyPiLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: ../build/pip-modules
+      CompatibleRuntimes:
+        - python3.8
+      LicenseInfo: 'MIT'
+      RetentionPolicy: Retain
+
+  ServiceDepLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: ../build/service-layer
+      CompatibleRuntimes:
+        - python3.8
+      LicenseInfo: 'MIT'
+      RetentionPolicy: Retain
+
+Outputs:
+  PyPiLayerArn:
+    Value: !Ref PyPiLayer
+    Description: Arn of pip modules layer
+  ServiceLayerArn:
+    Value: !Ref ServiceDepLayer
+    Description: Arn of services modules layer

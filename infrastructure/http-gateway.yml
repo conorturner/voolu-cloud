@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: 'AWS::Serverless-2016-10-31'
+Description: "Voolu Cloud - http-gateway stack"
+
+
+Parameters:
+  LambdaLayerArn:
+    Description: ARN of python dependancy layer
+    Type: String
+  ServiceLayerArn:
+    Description: ARN of python dependancy layer
+    Type: String
+  GatewayDomainName:
+    Description: Domain name to deploy application behind
+    Type: String
+  GatewayCertArn:
+    Description: SSL Cert for cloudfront alias
+    Type: String
+  HostedZoneName:
+    Description: SSL Cert for cloudfront alias
+    Type: String
+    Default: voolu.io
+  JWTSecret:
+    Type: String
+    Default: its-really-not-that-secret
+  ReplicaAddrBucket:
+    Type: String
+    Default: ...
+
+Resources:
+  AuthBucket: # tokens etc
+    Type: 'AWS::S3::Bucket'
+
+  DelayDeleteQueue:
+    Type: AWS::SQS::Queue
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies: # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-policy-template-list.html
+        - PolicyName: !Sub '${AWS::StackName}-s3-crud'
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:GetLifecycleConfiguration
+                  - s3:PutLifecycleConfiguration
+                  - s3:DeleteObject
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${ReplicaAddrBucket}
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${ReplicaAddrBucket}/*
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::${AuthBucket}/*
+                Effect: Allow
+        - PolicyName: !Sub '${AWS::StackName}-sqs-send'
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - sqs:SendMessage*
+                  - sqs:GetQueueUrl
+                  - sqs:GetQueueAttributes
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource:
+                  - !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${DelayDeleteQueue.QueueName}
+                Effect: Allow
+
+  DnsARecord:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneName: !Join ['', [!Ref HostedZoneName, .]]
+      Comment: Alias for api-gateway
+      RecordSets:
+        - Name: !Join ['', [!Ref GatewayDomainName, .]]
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt ApiGatewayDomain.DistributionHostedZoneId
+            DNSName: !GetAtt ApiGatewayDomain.DistributionDomainName
+
+  ApiGatewayMapping:
+    Type: 'AWS::ApiGateway::BasePathMapping'
+    Properties:
+      DomainName: !Ref ApiGatewayDomain
+      RestApiId: !Ref RestAPI
+      Stage: Prod
+
+  ApiGatewayDomain:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      CertificateArn: !Ref GatewayCertArn
+      DomainName: !Ref GatewayDomainName
+
+  RestAPIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../gateway/http
+      Handler: handler.lambda_handler
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 30
+      Role: !GetAtt LambdaRole.Arn
+      Layers:
+        - !Ref LambdaLayerArn
+        - !Ref ServiceLayerArn
+      Events:
+        ProxyApiGreedy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestAPI
+            Path: /{proxy+}
+            Method: ANY
+      Environment:
+        Variables:
+          REPLICA_BUCKET: !Ref ReplicaAddrBucket
+          AUTH_BUCKET: !Ref AuthBucket
+          JWT_SECRET: !Ref JWTSecret
+
+  RestAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+
+Outputs:
+  ApiUrl:
+    Value: !Join ['', ['https://', !Ref GatewayDomainName]]
+    Description: Url for api-gateway rest api
+  ReplicaAddrBucket:
+    Value: !Ref ReplicaAddrBucket
+    Description: ReplicaAddrBucket
+  DelayDeleteQueue:
+    Value: !GetAtt DelayDeleteQueue.QueueName
+    Description: DelayDeleteQueue

@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: 'AWS::Serverless-2016-10-31'
+Description: "Voolu Cloud - dashboard stack"
+
+Parameters:
+  LambdaLayerArn:
+    Description: ARN of python dependancy layer
+    Type: String
+  ServiceLayerArn:
+    Description: ARN of python dependancy layer
+    Type: String
+  WebsiteDomainName:
+    Description: Domain name for bucket
+    Type: String
+  WebsiteCertArn:
+    Description: Cert for cloudfront
+    Type: String
+  AliasDomainZone:
+    Description: Domain name used to create cloudfront alias
+    Type: String
+    Default: voolu.io.
+
+Resources:
+  ClientBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref WebsiteDomainName
+      AccessControl: PublicRead
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST]
+            AllowedOrigins: ['*']
+            Id: basic
+            MaxAge: 3600
+      WebsiteConfiguration:
+        ErrorDocument: index.html
+        IndexDocument: index.html
+
+  DownloadBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Join ['.', ['download', !Ref WebsiteDomainName]]
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        ErrorDocument: index.html
+        IndexDocument: index.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET]
+            AllowedOrigins: ['*']
+            Id: basic
+            MaxAge: 3600
+
+  RestAPIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../dashboard/api
+      Handler: handler.lambda_handler
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 30
+      #      Role: !GetAtt LambdaRole.Arn
+      Layers:
+        - !Ref LambdaLayerArn
+        - !Ref ServiceLayerArn
+      Events:
+        ProxyApiGreedy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestAPI
+            Path: /{proxy+}
+            Method: ANY
+  #      Environment:
+  #        Variables:
+  #          DATABASE_BUCKET: !Ref DatabaseBucket
+
+  RestAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+
+  CloudfrontA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Ref AliasDomainZone
+      Name: !Join ['', [!Ref WebsiteDomainName, '.']]
+      Comment: !Sub "A for ${AWS::Region} cloudfront distribution"
+      Type: A
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2 # this is a constant value when routing to cloudfront
+        DNSName: !GetAtt CloudFront.DomainName
+
+  CloudFront:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref WebsiteDomainName
+        Enabled: true
+        Origins:
+          - Id: web_bucket
+            DomainName: !Select [1, !Split ["//", !GetAtt ClientBucket.WebsiteURL]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+          - Id: download_bucket
+            DomainName: !Select [1, !Split ["//", !GetAtt DownloadBucket.WebsiteURL]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+          - Id: web_api
+            DomainName: !Sub "${RestAPI}.execute-api.${AWS::Region}.amazonaws.com"
+            OriginPath: /Prod
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          AllowedMethods: [HEAD, DELETE, POST, GET, OPTIONS, PUT, PATCH]
+          Compress: true
+          DefaultTTL: 0
+          MaxTTL: 0
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: true
+          TargetOriginId: web_bucket
+        CacheBehaviors:
+          - TargetOriginId: download_bucket
+            PathPattern: "/download/*"
+            AllowedMethods: [HEAD, DELETE, POST, GET, OPTIONS, PUT, PATCH]
+            CachedMethods: [HEAD, GET, OPTIONS]
+            DefaultTTL: 0
+            MaxTTL: 0
+            Compress: true
+            ForwardedValues:
+              QueryString: true
+            ViewerProtocolPolicy: https-only
+          - TargetOriginId: web_api
+            PathPattern: "/api/*"
+            AllowedMethods: [HEAD, GET, OPTIONS]
+            CachedMethods: [HEAD, GET, OPTIONS]
+            DefaultTTL: 0
+            MaxTTL: 0
+            Compress: true
+            ForwardedValues:
+              Headers: # define explicit headers, since API Gateway doesn't work otherwise
+                - Accept
+                - Referer
+                - Athorization
+                - Content-Type
+              QueryString: true
+            ViewerProtocolPolicy: https-only
+        ViewerCertificate:
+          AcmCertificateArn: !Ref WebsiteCertArn
+          SslSupportMethod: sni-only
+
+Outputs:
+  WebsiteDomainName:
+    Value: !Select [1, !Split ["//", !GetAtt ClientBucket.WebsiteURL]]
+    Description: Domain name to non-https web client storage bucket.
+  ApiDomainName:
+    Value: !Sub "${RestAPI}.execute-api.${AWS::Region}.amazonaws.com"
+    Description: Domain name for api-gateway rest api

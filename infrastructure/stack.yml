@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Voolu Cloud - top level deployment"
+
+Parameters:
+  BucketUrl:
+    Description: S3 Url for template bucket
+    Type: String
+  WebsiteDomainName:
+    Description: Domain name to deploy application behind
+    Type: String
+  WebsiteCertArn:
+    Description: SSL Cert for cloudfront alias
+    Type: String
+  GatewayDomainName:
+    Description: Domain name to deploy application behind
+    Type: String
+  GatewayCertArn:
+    Description: SSL Cert for cloudfront alias
+    Type: String
+  TCPServiceImage:
+    Description: Docker image for tcp gateway cluster
+    Type: String
+  TCPPort:
+    Type: Number
+    Default: 222
+  CpuAlloc:
+    Type: Number
+    Default: 256
+  MemAlloc:
+    Type: String
+    Default: 0.5GB
+  JWTSecret:
+    Type: String
+    Default: its-really-not-that-secret
+
+Resources:
+  LambdaLayers:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub "${BucketUrl}/lambda-layers.yml"
+
+  HealthCheck:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub "${BucketUrl}/health-check.yml"
+      Parameters:
+        LambdaLayerArn: !GetAtt [LambdaLayers, Outputs.PyPiLayerArn]
+        ServiceLayerArn: !GetAtt [LambdaLayers, Outputs.ServiceLayerArn]
+
+  HttpGateway:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub "${BucketUrl}/http-gateway.yml"
+      Parameters:
+        LambdaLayerArn: !GetAtt [LambdaLayers, Outputs.PyPiLayerArn]
+        ServiceLayerArn: !GetAtt [LambdaLayers, Outputs.ServiceLayerArn]
+        GatewayDomainName: !Ref GatewayDomainName
+        GatewayCertArn: !Ref GatewayCertArn
+        JWTSecret: !Ref JWTSecret
+        ReplicaAddrBucket: !GetAtt [HealthCheck, Outputs.ReplicaAddrBucket]
+
+  # TODO: multi-region https://surevine.com/creating-cloudformation-stacks-in-multiple-aws-regions-with-common-resources/
+  TCPGateway:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub "${BucketUrl}/tcp-gateway.yml"
+      Parameters:
+        NumContainers: 1
+        TCPPort: !Ref TCPPort
+        ServiceName: !Sub '${AWS::StackName}-${AWS::Region}-tcp-service'
+        Image: !Ref TCPServiceImage
+        CpuAlloc: !Ref CpuAlloc
+        MemAlloc: !Ref MemAlloc
+        VPC: vpc-d2274dba
+        SubnetA: subnet-d5e82799
+        SubnetB: subnet-dd13aaa7
+        HeartbeatQueue: !GetAtt [HealthCheck, Outputs.HeartbeatQueue]
+        DiscoveryUrl: !GetAtt [HttpGateway, Outputs.ApiUrl]
+
+  Dashboard:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub "${BucketUrl}/dashboard.yml"
+      Parameters:
+        LambdaLayerArn: !GetAtt [LambdaLayers, Outputs.PyPiLayerArn]
+        ServiceLayerArn: !GetAtt [LambdaLayers, Outputs.ServiceLayerArn]
+        WebsiteDomainName: !Ref WebsiteDomainName
+        WebsiteCertArn: !Ref WebsiteCertArn
